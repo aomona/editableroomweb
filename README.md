@@ -11,7 +11,7 @@ VRChat向けの部屋レイアウトJSONを編集・保存・配信するNext.js
 - オブジェクト追加、複製、削除
 - ミラー/ライト系トグルの個人初期値管理
 - VRChat向けJSONエクスポート
-- Vercel Blobへの保存
+- Vercel Blobへのprivate保存
 - Vercel APIからJSON配信
 
 ## Development
@@ -24,6 +24,7 @@ pnpm dev
 Open `http://localhost:3000`.
 
 `BLOB_READ_WRITE_TOKEN` が未設定のローカル環境では、`data/room-project.json` に保存します。
+`BLOB_READ_WRITE_TOKEN` がある環境では、Blob本体はprivateで保存し、Next.js API経由でJSONを配信します。
 
 ## API
 

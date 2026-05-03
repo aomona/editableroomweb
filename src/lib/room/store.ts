@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { list, put } from "@vercel/blob";
+import { get, put } from "@vercel/blob";
 import { initialProject } from "./initial-project";
 import type { RoomProject } from "./types";
 
@@ -23,7 +23,7 @@ export async function readProject(): Promise<RoomProject> {
 export async function writeProject(project: RoomProject): Promise<void> {
   if (hasBlobToken()) {
     await put(blobPath, JSON.stringify(project, null, 2), {
-      access: "public",
+      access: "private",
       allowOverwrite: true,
       contentType: "application/json",
     });
@@ -34,20 +34,15 @@ export async function writeProject(project: RoomProject): Promise<void> {
 }
 
 async function readProjectFromBlob(): Promise<RoomProject> {
-  const blobs = await list({ prefix: blobPath, limit: 1 });
-  const blob = blobs.blobs.find((item) => item.pathname === blobPath);
+  const result = await get(blobPath, { access: "private", useCache: false });
 
-  if (!blob) {
+  if (!result?.stream) {
     await writeProject(initialProject);
     return initialProject;
   }
 
-  const response = await fetch(blob.url, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to read Blob project: ${response.status}`);
-  }
-
-  return (await response.json()) as RoomProject;
+  const text = await new Response(result.stream).text();
+  return JSON.parse(text) as RoomProject;
 }
 
 async function readProjectFromFile(): Promise<RoomProject> {
