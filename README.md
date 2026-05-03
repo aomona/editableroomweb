@@ -4,14 +4,16 @@ VRChat向けの部屋レイアウトJSONを編集・保存・配信するNext.js
 
 ## Features
 
-- 2D平面上で家具、ライト、ミラー、小物をドラッグ移動
+- 2D平面上でPrefab Poolの配置インスタンスをドラッグ移動
 - 回転ハンドルでY回転を編集
 - グリッド表示/吸着
 - 位置、回転、サイズの数値編集
 - オブジェクト追加、複製、削除
-- ミラー/ライト系トグルの個人初期値管理
+- ミラー/ライト系トグルの個人初期値管理に対応
 - Liveblocksによるリアルタイム共同編集
 - 他ユーザーのカーソル/選択オブジェクト表示
+- 固定Prefabカタログから配置インスタンスを追加
+- Prefabごとのpool上限で追加/複製を制限
 - VRChat向けJSONエクスポート
 - Vercel Blobへのprivate保存
 - Vercel APIからJSON配信
@@ -63,6 +65,16 @@ https://your-app.vercel.app/api/public/room-layout
 ```
 
 共同編集中のLiveblocks上の変更は即時に他ブラウザへ反映されます。VRChat配信用JSONは、画面上の保存ボタンでVercel Blobへ保存したタイミングで更新されます。
+
+## Prefab Pool Model
+
+VRChat実行中にWebから新しいPrefabアセットを動的追加するのではなく、Unity側に事前登録したPrefab PoolをWeb JSONで配置します。
+
+- Webの `prefabs` はUnity側のPrefab Registryと同じIDにします。
+- Webの `instances` はPool内の何個目を有効化して配置するかを表します。
+- `maxInstances` を超える追加/複製はWeb UIで止めます。
+- 現在の検証用固定カタログは `sofa` 1種類のみで、pool上限は10です。
+- ミラー/ライトのON/OFF初期値は `personalToggleDefaults` に `instanceId` 参照で保存します。
 
 ## VRChat URL Note
 

@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { get, put } from "@vercel/blob";
 import { initialProject } from "./initial-project";
+import { normalizeProject } from "./normalize";
 import type { RoomProject } from "./types";
 
 const dataDirectory = path.join(process.cwd(), "data");
@@ -21,8 +22,10 @@ export async function readProject(): Promise<RoomProject> {
 }
 
 export async function writeProject(project: RoomProject): Promise<void> {
+  const normalizedProject = normalizeProject(project);
+
   if (hasBlobToken()) {
-    await put(blobPath, JSON.stringify(project, null, 2), {
+    await put(blobPath, JSON.stringify(normalizedProject, null, 2), {
       access: "private",
       allowOverwrite: true,
       contentType: "application/json",
@@ -30,7 +33,7 @@ export async function writeProject(project: RoomProject): Promise<void> {
     return;
   }
 
-  await writeProjectToFile(project);
+  await writeProjectToFile(normalizedProject);
 }
 
 async function readProjectFromBlob(): Promise<RoomProject> {
@@ -42,13 +45,13 @@ async function readProjectFromBlob(): Promise<RoomProject> {
   }
 
   const text = await new Response(result.stream).text();
-  return JSON.parse(text) as RoomProject;
+  return normalizeProject(JSON.parse(text));
 }
 
 async function readProjectFromFile(): Promise<RoomProject> {
   try {
     const file = await readFile(projectPath, "utf8");
-    return JSON.parse(file) as RoomProject;
+    return normalizeProject(JSON.parse(file));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
@@ -65,17 +68,15 @@ async function writeProjectToFile(project: RoomProject): Promise<void> {
 }
 
 export function toVrchatExport(project: RoomProject): RoomProject {
+  const normalized = normalizeProject(project);
+
   return {
-    ...project,
-    objects: project.objects.map((object) => ({
-      ...object,
-      position: roundVector(object.position),
-      rotation: { y: roundNumber(object.rotation.y) },
-      size: {
-        width: roundNumber(object.size.width),
-        height: roundNumber(object.size.height),
-        depth: roundNumber(object.size.depth),
-      },
+    ...normalized,
+    instances: normalized.instances.map((instance) => ({
+      ...instance,
+      position: roundVector(instance.position),
+      rotation: { y: roundNumber(instance.rotation.y) },
+      scale: roundVector(instance.scale),
     })),
   };
 }

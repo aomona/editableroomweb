@@ -6,33 +6,43 @@ export type Vector3 = {
   z: number;
 };
 
-export type RoomObject = {
+export type Size3 = {
+  width: number;
+  height: number;
+  depth: number;
+};
+
+export type PrefabDefinition = {
   id: string;
   name: string;
   type: RoomObjectType;
-  position: Vector3;
-  rotation: {
-    y: number;
-  };
-  size: {
-    width: number;
-    height: number;
-    depth: number;
-  };
-  enabled: boolean;
+  maxInstances: number;
+  defaultSize: Size3;
   light?: {
     intensity: number;
     color: string;
   };
 };
 
+export type RoomObjectInstance = {
+  instanceId: string;
+  prefabId: string;
+  name: string;
+  position: Vector3;
+  rotation: {
+    y: number;
+  };
+  scale: Vector3;
+  enabled: boolean;
+};
+
 export type PersonalToggleDefault = {
-  objectId: string;
+  instanceId: string;
   defaultEnabled: boolean;
 };
 
 export type RoomProject = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   name: string;
   room: {
@@ -40,6 +50,7 @@ export type RoomProject = {
     depth: number;
     gridSize: number;
   };
-  objects: RoomObject[];
+  prefabs: PrefabDefinition[];
+  instances: RoomObjectInstance[];
   personalToggleDefaults: PersonalToggleDefault[];
 };

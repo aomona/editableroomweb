@@ -39,12 +39,19 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { RoomObject, RoomObjectType, RoomProject } from "@/lib/room/types";
+import { normalizeProject } from "@/lib/room/normalize";
+import type {
+  PrefabDefinition,
+  RoomObjectInstance,
+  RoomObjectType,
+  RoomProject,
+  Size3,
+} from "@/lib/room/types";
 
 type DragMode = "move" | "rotate";
 
 type DragState = {
-  objectId: string;
+  instanceId: string;
   mode: DragMode;
 };
 
@@ -79,7 +86,7 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
     },
     [],
   );
-  const [selectedId, setSelectedId] = useState(initialProject.objects[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(initialProject.instances[0]?.instanceId ?? "");
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [status, setStatus] = useState("未保存の変更はありません");
@@ -87,7 +94,8 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
   const [isPending, startTransition] = useTransition();
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  const selectedObject = project.objects.find((object) => object.id === selectedId);
+  const selectedInstance = project.instances.find((instance) => instance.instanceId === selectedId);
+  const selectedPrefab = selectedInstance ? getPrefab(project, selectedInstance.prefabId) : undefined;
   const publicUrl = typeof window === "undefined" ? "" : `${window.location.origin}/api/public/room-layout`;
 
   function updateProject(nextProject: RoomProject) {
@@ -95,57 +103,57 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
     setStatus("未保存の変更があります");
   }
 
-  function selectObject(objectId: string) {
-    setSelectedId(objectId);
-    updateMyPresence({ selectedId: objectId });
+  function selectInstance(instanceId: string) {
+    setSelectedId(instanceId);
+    updateMyPresence({ selectedId: instanceId });
   }
 
-  function updateObject(objectId: string, patch: Partial<RoomObject>) {
+  function updateInstance(instanceId: string, patch: Partial<RoomObjectInstance>) {
     updateProject({
       ...project,
-      objects: project.objects.map((object) =>
-        object.id === objectId ? { ...object, ...patch } : object,
+      instances: project.instances.map((instance) =>
+        instance.instanceId === instanceId ? { ...instance, ...patch } : instance,
       ),
     });
   }
 
   function updateSelectedNumber(path: string, value: string) {
-    if (!selectedObject) return;
+    if (!selectedInstance) return;
 
     const numericValue = Number(value);
     if (Number.isNaN(numericValue)) return;
 
     if (path === "position.x") {
-      updateObject(selectedObject.id, {
-        position: { ...selectedObject.position, x: numericValue },
+      updateInstance(selectedInstance.instanceId, {
+        position: { ...selectedInstance.position, x: numericValue },
       });
     }
     if (path === "position.y") {
-      updateObject(selectedObject.id, {
-        position: { ...selectedObject.position, y: numericValue },
+      updateInstance(selectedInstance.instanceId, {
+        position: { ...selectedInstance.position, y: numericValue },
       });
     }
     if (path === "position.z") {
-      updateObject(selectedObject.id, {
-        position: { ...selectedObject.position, z: numericValue },
+      updateInstance(selectedInstance.instanceId, {
+        position: { ...selectedInstance.position, z: numericValue },
       });
     }
     if (path === "rotation.y") {
-      updateObject(selectedObject.id, { rotation: { y: numericValue } });
+      updateInstance(selectedInstance.instanceId, { rotation: { y: numericValue } });
     }
-    if (path === "size.width") {
-      updateObject(selectedObject.id, {
-        size: { ...selectedObject.size, width: numericValue },
+    if (path === "scale.x") {
+      updateInstance(selectedInstance.instanceId, {
+        scale: { ...selectedInstance.scale, x: numericValue },
       });
     }
-    if (path === "size.height") {
-      updateObject(selectedObject.id, {
-        size: { ...selectedObject.size, height: numericValue },
+    if (path === "scale.y") {
+      updateInstance(selectedInstance.instanceId, {
+        scale: { ...selectedInstance.scale, y: numericValue },
       });
     }
-    if (path === "size.depth") {
-      updateObject(selectedObject.id, {
-        size: { ...selectedObject.size, depth: numericValue },
+    if (path === "scale.z") {
+      updateInstance(selectedInstance.instanceId, {
+        scale: { ...selectedInstance.scale, z: numericValue },
       });
     }
   }
@@ -171,11 +179,11 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
     return round(Math.round(value / project.room.gridSize) * project.room.gridSize);
   }
 
-  function handlePointerDown(event: PointerEvent<HTMLDivElement>, objectId: string, mode: DragMode) {
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>, instanceId: string, mode: DragMode) {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    selectObject(objectId);
-    setDragState({ objectId, mode });
+    selectInstance(instanceId);
+    setDragState({ instanceId, mode });
   }
 
   function handleCanvasPointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -195,97 +203,93 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
     const position = getCanvasPosition(event);
     if (!position) return;
 
-    const object = project.objects.find((item) => item.id === dragState.objectId);
-    if (!object) return;
+    const instance = project.instances.find((item) => item.instanceId === dragState.instanceId);
+    if (!instance) return;
 
     if (dragState.mode === "move") {
-      updateObject(object.id, {
-        position: { ...object.position, x: position.x, z: position.z },
+      updateInstance(instance.instanceId, {
+        position: { ...instance.position, x: position.x, z: position.z },
       });
       return;
     }
 
-    const angle = Math.atan2(position.x - object.position.x, position.z - object.position.z);
-    updateObject(object.id, { rotation: { y: round((angle * 180) / Math.PI) } });
+    const angle = Math.atan2(position.x - instance.position.x, position.z - instance.position.z);
+    updateInstance(instance.instanceId, { rotation: { y: round((angle * 180) / Math.PI) } });
   }
 
-  function duplicateSelectedObject() {
-    if (!selectedObject) return;
+  function addPrefab(prefabId: string) {
+    const prefab = getPrefab(project, prefabId);
+    if (!prefab || !canAddPrefab(project, prefab.id)) return;
 
-    const id = makeUniqueId(
-      `${selectedObject.id}-copy`,
-      project.objects.map((object) => object.id),
-    );
-    const duplicate: RoomObject = {
-      ...selectedObject,
-      id,
-      name: `${selectedObject.name} Copy`,
+    const instanceId = nextInstanceId(project, prefab.id);
+    const instance: RoomObjectInstance = {
+      instanceId,
+      prefabId: prefab.id,
+      name: `${prefab.name} ${countInstances(project, prefab.id) + 1}`,
+      position: { x: 0, y: prefab.type === "mirror" ? 1.2 : 0, z: 0 },
+      rotation: { y: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      enabled: true,
+    };
+
+    updateProject({
+      ...project,
+      instances: [...project.instances, instance],
+      personalToggleDefaults: shouldHavePersonalToggle(prefab)
+        ? [...project.personalToggleDefaults, { instanceId, defaultEnabled: true }]
+        : project.personalToggleDefaults,
+    });
+    selectInstance(instanceId);
+  }
+
+  function duplicateSelectedInstance() {
+    if (!selectedInstance || !selectedPrefab || !canAddPrefab(project, selectedPrefab.id)) return;
+
+    const instanceId = nextInstanceId(project, selectedPrefab.id);
+    const duplicate: RoomObjectInstance = {
+      ...selectedInstance,
+      instanceId,
+      name: `${selectedPrefab.name} ${countInstances(project, selectedPrefab.id) + 1}`,
       position: {
-        ...selectedObject.position,
-        x: clamp(selectedObject.position.x + project.room.gridSize, -project.room.width / 2, project.room.width / 2),
-        z: clamp(selectedObject.position.z + project.room.gridSize, -project.room.depth / 2, project.room.depth / 2),
+        ...selectedInstance.position,
+        x: clamp(selectedInstance.position.x + project.room.gridSize, -project.room.width / 2, project.room.width / 2),
+        z: clamp(selectedInstance.position.z + project.room.gridSize, -project.room.depth / 2, project.room.depth / 2),
       },
     };
 
     updateProject({
       ...project,
-      objects: [...project.objects, duplicate],
-      personalToggleDefaults: shouldHavePersonalToggle(duplicate)
-        ? [...project.personalToggleDefaults, { objectId: duplicate.id, defaultEnabled: true }]
+      instances: [...project.instances, duplicate],
+      personalToggleDefaults: shouldHavePersonalToggle(selectedPrefab)
+        ? [...project.personalToggleDefaults, { instanceId, defaultEnabled: true }]
         : project.personalToggleDefaults,
     });
-    selectObject(duplicate.id);
+    selectInstance(instanceId);
   }
 
-  function deleteSelectedObject() {
-    if (!selectedObject) return;
+  function deleteSelectedInstance() {
+    if (!selectedInstance) return;
 
-    const nextObjects = project.objects.filter((object) => object.id !== selectedObject.id);
+    const nextInstances = project.instances.filter((instance) => instance.instanceId !== selectedInstance.instanceId);
     updateProject({
       ...project,
-      objects: nextObjects,
+      instances: nextInstances,
       personalToggleDefaults: project.personalToggleDefaults.filter(
-        (toggle) => toggle.objectId !== selectedObject.id,
+        (toggle) => toggle.instanceId !== selectedInstance.instanceId,
       ),
     });
-    selectObject(nextObjects[0]?.id ?? "");
+    selectInstance(nextInstances[0]?.instanceId ?? "");
   }
 
-  function addObject(type: RoomObjectType) {
-    const id = makeUniqueId(
-      `new-${type}`,
-      project.objects.map((object) => object.id),
-    );
-    const object: RoomObject = {
-      id,
-      name: `New ${type}`,
-      type,
-      position: { x: 0, y: type === "mirror" ? 1.2 : 0, z: 0 },
-      rotation: { y: 0 },
-      size: type === "mirror" ? { width: 1.8, height: 1.2, depth: 0.05 } : { width: 0.8, height: 0.8, depth: 0.8 },
-      enabled: true,
-      light: type === "light" ? { intensity: 1, color: "#fff4dd" } : undefined,
-    };
-
-    updateProject({
-      ...project,
-      objects: [...project.objects, object],
-      personalToggleDefaults: shouldHavePersonalToggle(object)
-        ? [...project.personalToggleDefaults, { objectId: object.id, defaultEnabled: true }]
-        : project.personalToggleDefaults,
-    });
-    selectObject(id);
-  }
-
-  function togglePersonalDefault(objectId: string, defaultEnabled: boolean) {
-    const exists = project.personalToggleDefaults.some((toggle) => toggle.objectId === objectId);
+  function togglePersonalDefault(instanceId: string, defaultEnabled: boolean) {
+    const exists = project.personalToggleDefaults.some((toggle) => toggle.instanceId === instanceId);
     updateProject({
       ...project,
       personalToggleDefaults: exists
         ? project.personalToggleDefaults.map((toggle) =>
-            toggle.objectId === objectId ? { ...toggle, defaultEnabled } : toggle,
+            toggle.instanceId === instanceId ? { ...toggle, defaultEnabled } : toggle,
           )
-        : [...project.personalToggleDefaults, { objectId, defaultEnabled }],
+        : [...project.personalToggleDefaults, { instanceId, defaultEnabled }],
     });
   }
 
@@ -304,9 +308,9 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
   function reloadProject() {
     startTransition(async () => {
       const response = await fetch("/api/project");
-      const nextProject = (await response.json()) as RoomProject;
+      const nextProject = normalizeProject(await response.json());
       setSharedProject(nextProject);
-      selectObject(nextProject.objects[0]?.id ?? "");
+      selectInstance(nextProject.instances[0]?.instanceId ?? "");
       setStatus("JSONファイルから読み込みました");
     });
   }
@@ -325,12 +329,12 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">Editable Room Web</h1>
-              <Badge variant="secondary">VRChat layout JSON</Badge>
+              <Badge variant="secondary">Prefab Pool Layout</Badge>
               <Badge variant="outline">{others.length + 1} online</Badge>
               <Badge variant="outline">Liveblocks: {syncStatus}</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              位置・回転・サイズは共有レイアウト、ミラー/ライト系トグルは個人初期値として管理します。
+              Unity側に事前登録したPrefab Poolを、Web JSONで配置します。pool上限を超える複製はできません。
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -352,43 +356,70 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
           </TabsList>
 
           <TabsContent value="editor" className="m-0">
-            <div className="grid gap-4 xl:grid-cols-[280px_minmax(520px,1fr)_320px]">
+            <div className="grid gap-4 xl:grid-cols-[300px_minmax(520px,1fr)_320px]">
               <Card>
                 <CardHeader>
-                  <CardTitle>Objects</CardTitle>
-                  <CardDescription>共通位置を編集するオブジェクト</CardDescription>
+                  <CardTitle>Prefab Catalog</CardTitle>
+                  <CardDescription>Unity側Poolに登録する固定Prefab</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["furniture", "light", "mirror", "prop"] as RoomObjectType[]).map((type) => (
-                      <Button key={type} variant="outline" size="sm" onClick={() => addObject(type)}>
-                        + {objectTypeLabels[type]}
-                      </Button>
-                    ))}
-                  </div>
-                  <Separator />
-                  <ScrollArea className="h-[560px] pr-3">
+                <CardContent className="space-y-4">
+                  <ScrollArea className="h-[260px] pr-3">
                     <div className="space-y-2">
-                      {project.objects.map((object) => (
-                        <button
-                          key={object.id}
-                          type="button"
-                          onClick={() => selectObject(object.id)}
-                          className={cn(
-                            "flex w-full items-center justify-between rounded-lg border p-3 text-left text-sm transition hover:bg-accent",
-                            selectedId === object.id && "border-primary bg-accent",
-                          )}
-                        >
-                          <span>
-                            <span className="block font-medium">{object.name}</span>
-                            <span className="text-xs text-muted-foreground">{object.id}</span>
-                          </span>
-                          <Badge variant="outline">{objectTypeLabels[object.type]}</Badge>
-                          {others.some((other) => other.presence.selectedId === object.id) ? (
-                            <Badge variant="secondary">編集中</Badge>
-                          ) : null}
-                        </button>
-                      ))}
+                      {project.prefabs.map((prefab) => {
+                        const used = countInstances(project, prefab.id);
+                        const disabled = used >= prefab.maxInstances;
+                        return (
+                          <div key={prefab.id} className="rounded-lg border p-3 text-sm">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="font-medium">{prefab.name}</div>
+                                <div className="text-xs text-muted-foreground">{prefab.id}</div>
+                              </div>
+                              <Badge variant="outline">{objectTypeLabels[prefab.type]}</Badge>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                              <span className="text-xs text-muted-foreground">Pool {used}/{prefab.maxInstances}</span>
+                              <Button size="sm" variant="outline" disabled={disabled} onClick={() => addPrefab(prefab.id)}>
+                                + 配置
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                  <Separator />
+                  <div>
+                    <CardTitle className="text-base">Placed Objects</CardTitle>
+                    <CardDescription>配置済みインスタンス</CardDescription>
+                  </div>
+                  <ScrollArea className="h-[300px] pr-3">
+                    <div className="space-y-2">
+                      {project.instances.map((instance) => {
+                        const prefab = getPrefab(project, instance.prefabId);
+                        return (
+                          <button
+                            key={instance.instanceId}
+                            type="button"
+                            onClick={() => selectInstance(instance.instanceId)}
+                            className={cn(
+                              "flex w-full items-center justify-between gap-2 rounded-lg border p-3 text-left text-sm transition hover:bg-accent",
+                              selectedId === instance.instanceId && "border-primary bg-accent",
+                            )}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium">{instance.name}</span>
+                              <span className="block truncate text-xs text-muted-foreground">{instance.instanceId}</span>
+                            </span>
+                            <span className="flex flex-col items-end gap-1">
+                              <Badge variant="outline">{prefab ? objectTypeLabels[prefab.type] : instance.prefabId}</Badge>
+                              {others.some((other) => other.presence.selectedId === instance.instanceId) ? (
+                                <Badge variant="secondary">編集中</Badge>
+                              ) : null}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                 </CardContent>
@@ -424,44 +455,49 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
                   >
                     <div className="absolute left-1/2 top-0 h-full w-px bg-primary/20" />
                     <div className="absolute left-0 top-1/2 h-px w-full bg-primary/20" />
-                    {project.objects.map((object) => (
-                      <div
-                        key={object.id}
-                        className="absolute"
-                        style={{
-                          left: `${((object.position.x + project.room.width / 2) / project.room.width) * 100}%`,
-                          top: `${((object.position.z + project.room.depth / 2) / project.room.depth) * 100}%`,
-                          width: `${(object.size.width / project.room.width) * 100}%`,
-                          height: `${(object.size.depth / project.room.depth) * 100}%`,
-                          minWidth: 20,
-                          minHeight: 20,
-                          transform: `translate(-50%, -50%) rotate(${object.rotation.y}deg)`,
-                        }}
-                      >
+                    {project.instances.map((instance) => {
+                      const prefab = getPrefab(project, instance.prefabId);
+                      if (!prefab) return null;
+                      const size = instanceSize(prefab.defaultSize, instance.scale);
+                      return (
                         <div
-                          onPointerDown={(event) => handlePointerDown(event, object.id, "move")}
-                          className={cn(
-                            "flex h-full w-full cursor-grab items-center justify-center rounded-md border-2 px-2 text-center text-[11px] font-medium shadow-sm active:cursor-grabbing",
-                            objectTypeStyles[object.type],
-                            selectedId === object.id && "ring-2 ring-primary ring-offset-2",
-                            !object.enabled && "opacity-35 grayscale",
-                          )}
-                          title="Drag to move"
+                          key={instance.instanceId}
+                          className="absolute"
+                          style={{
+                            left: `${((instance.position.x + project.room.width / 2) / project.room.width) * 100}%`,
+                            top: `${((instance.position.z + project.room.depth / 2) / project.room.depth) * 100}%`,
+                            width: `${(size.width / project.room.width) * 100}%`,
+                            height: `${(size.depth / project.room.depth) * 100}%`,
+                            minWidth: 20,
+                            minHeight: 20,
+                            transform: `translate(-50%, -50%) rotate(${instance.rotation.y}deg)`,
+                          }}
                         >
-                          {object.type === "light" ? <Lightbulb className="mr-1 size-3" /> : <Move className="mr-1 size-3" />}
-                          <span className="truncate">{object.name}</span>
-                        </div>
-                        {selectedId === object.id ? (
                           <div
-                            onPointerDown={(event) => handlePointerDown(event, object.id, "rotate")}
-                            className="absolute -right-3 -top-3 flex size-7 cursor-crosshair items-center justify-center rounded-full border bg-background text-primary shadow-sm"
-                            title="Drag to rotate"
+                            onPointerDown={(event) => handlePointerDown(event, instance.instanceId, "move")}
+                            className={cn(
+                              "flex h-full w-full cursor-grab items-center justify-center rounded-md border-2 px-2 text-center text-[11px] font-medium shadow-sm active:cursor-grabbing",
+                              objectTypeStyles[prefab.type],
+                              selectedId === instance.instanceId && "ring-2 ring-primary ring-offset-2",
+                              !instance.enabled && "opacity-35 grayscale",
+                            )}
+                            title="Drag to move"
                           >
-                            <RotateCw className="size-4" />
+                            {prefab.type === "light" ? <Lightbulb className="mr-1 size-3" /> : <Move className="mr-1 size-3" />}
+                            <span className="truncate">{instance.name}</span>
                           </div>
-                        ) : null}
-                      </div>
-                    ))}
+                          {selectedId === instance.instanceId ? (
+                            <div
+                              onPointerDown={(event) => handlePointerDown(event, instance.instanceId, "rotate")}
+                              className="absolute -right-3 -top-3 flex size-7 cursor-crosshair items-center justify-center rounded-full border bg-background text-primary shadow-sm"
+                              title="Drag to rotate"
+                            >
+                              <RotateCw className="size-4" />
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                     {others.map((other) =>
                       other.presence.cursor ? (
                         <div
@@ -488,53 +524,63 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
               <Card>
                 <CardHeader>
                   <CardTitle>Properties</CardTitle>
-                  <CardDescription>選択中オブジェクトの詳細値</CardDescription>
+                  <CardDescription>選択中インスタンスの詳細値</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {selectedObject ? (
+                  {selectedInstance && selectedPrefab ? (
                     <div className="space-y-4">
+                      <div className="rounded-lg border p-3 text-sm">
+                        <div className="font-medium">{selectedPrefab.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          prefabId: {selectedPrefab.id} / pool {countInstances(project, selectedPrefab.id)}/{selectedPrefab.maxInstances}
+                        </div>
+                      </div>
                       <div className="space-y-2">
                         <Label>Name</Label>
                         <Input
-                          value={selectedObject.name}
-                          onChange={(event) => updateObject(selectedObject.id, { name: event.target.value })}
+                          value={selectedInstance.name}
+                          onChange={(event) => updateInstance(selectedInstance.instanceId, { name: event.target.value })}
                         />
                       </div>
                       <div className="flex items-center justify-between rounded-lg border p-3">
                         <div>
                           <Label>共有 enabled</Label>
-                          <p className="text-xs text-muted-foreground">ワールド上に存在するか</p>
+                          <p className="text-xs text-muted-foreground">Pool内で有効化するか</p>
                         </div>
                         <Switch
-                          checked={selectedObject.enabled}
-                          onCheckedChange={(enabled) => updateObject(selectedObject.id, { enabled })}
+                          checked={selectedInstance.enabled}
+                          onCheckedChange={(enabled) => updateInstance(selectedInstance.instanceId, { enabled })}
                         />
                       </div>
                       <NumberGrid
                         values={[
-                          ["X", "position.x", selectedObject.position.x],
-                          ["Y", "position.y", selectedObject.position.y],
-                          ["Z", "position.z", selectedObject.position.z],
-                          ["Rot Y", "rotation.y", selectedObject.rotation.y],
-                          ["Width", "size.width", selectedObject.size.width],
-                          ["Height", "size.height", selectedObject.size.height],
-                          ["Depth", "size.depth", selectedObject.size.depth],
+                          ["X", "position.x", selectedInstance.position.x],
+                          ["Y", "position.y", selectedInstance.position.y],
+                          ["Z", "position.z", selectedInstance.position.z],
+                          ["Rot Y", "rotation.y", selectedInstance.rotation.y],
+                          ["Scale X", "scale.x", selectedInstance.scale.x],
+                          ["Scale Y", "scale.y", selectedInstance.scale.y],
+                          ["Scale Z", "scale.z", selectedInstance.scale.z],
                         ]}
                         onChange={updateSelectedNumber}
                       />
                       <div className="grid grid-cols-2 gap-2">
-                        <Button variant="outline" onClick={duplicateSelectedObject}>
+                        <Button
+                          variant="outline"
+                          onClick={duplicateSelectedInstance}
+                          disabled={!canAddPrefab(project, selectedPrefab.id)}
+                        >
                           <Copy className="size-4" />
                           複製
                         </Button>
-                        <Button variant="destructive" onClick={deleteSelectedObject}>
+                        <Button variant="destructive" onClick={deleteSelectedInstance}>
                           <Trash2 className="size-4" />
                           削除
                         </Button>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">オブジェクトを選択してください。</p>
+                    <p className="text-sm text-muted-foreground">インスタンスを選択してください。</p>
                   )}
                 </CardContent>
               </Card>
@@ -550,22 +596,30 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {project.objects.filter(shouldHavePersonalToggle).map((object) => {
-                  const toggle = project.personalToggleDefaults.find((item) => item.objectId === object.id);
-                  const enabled = toggle?.defaultEnabled ?? true;
-                  return (
-                    <div key={object.id} className="flex items-center justify-between rounded-lg border bg-background p-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 font-medium">
-                          {enabled ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-                          {object.name}
+                {project.instances
+                  .filter((instance) => {
+                    const prefab = getPrefab(project, instance.prefabId);
+                    return prefab ? shouldHavePersonalToggle(prefab) : false;
+                  })
+                  .map((instance) => {
+                    const prefab = getPrefab(project, instance.prefabId);
+                    const toggle = project.personalToggleDefaults.find((item) => item.instanceId === instance.instanceId);
+                    const enabled = toggle?.defaultEnabled ?? true;
+                    return (
+                      <div key={instance.instanceId} className="flex items-center justify-between rounded-lg border bg-background p-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 font-medium">
+                            {enabled ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                            {instance.name}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {instance.instanceId} / {prefab ? objectTypeLabels[prefab.type] : instance.prefabId}
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground">{object.id} / {objectTypeLabels[object.type]}</p>
+                        <Switch checked={enabled} onCheckedChange={(checked) => togglePersonalDefault(instance.instanceId, checked)} />
                       </div>
-                      <Switch checked={enabled} onCheckedChange={(checked) => togglePersonalDefault(object.id, checked)} />
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </CardContent>
             </Card>
           </TabsContent>
@@ -575,7 +629,7 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
               <Card>
                 <CardHeader>
                   <CardTitle>VRChat Export</CardTitle>
-                  <CardDescription>UdonSharp側が読むJSONです。</CardDescription>
+                  <CardDescription>UdonSharp側が読むPrefab Pool JSONです。</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <Button className="w-full" onClick={loadExportJson} disabled={isPending}>
@@ -636,8 +690,41 @@ function NumberGrid({
   );
 }
 
-function shouldHavePersonalToggle(object: RoomObject) {
-  return object.type === "mirror" || object.type === "light";
+function getPrefab(project: RoomProject, prefabId: string) {
+  return project.prefabs.find((prefab) => prefab.id === prefabId);
+}
+
+function countInstances(project: RoomProject, prefabId: string) {
+  return project.instances.filter((instance) => instance.prefabId === prefabId).length;
+}
+
+function canAddPrefab(project: RoomProject, prefabId: string) {
+  const prefab = getPrefab(project, prefabId);
+  return Boolean(prefab && countInstances(project, prefabId) < prefab.maxInstances);
+}
+
+function nextInstanceId(project: RoomProject, prefabId: string) {
+  let index = 1;
+  let instanceId = `${prefabId}-${index.toString().padStart(3, "0")}`;
+
+  while (project.instances.some((instance) => instance.instanceId === instanceId)) {
+    index += 1;
+    instanceId = `${prefabId}-${index.toString().padStart(3, "0")}`;
+  }
+
+  return instanceId;
+}
+
+function instanceSize(defaultSize: Size3, scale: { x: number; y: number; z: number }) {
+  return {
+    width: defaultSize.width * scale.x,
+    height: defaultSize.height * scale.y,
+    depth: defaultSize.depth * scale.z,
+  };
+}
+
+function shouldHavePersonalToggle(prefab: PrefabDefinition) {
+  return prefab.type === "mirror" || prefab.type === "light";
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -650,20 +737,8 @@ function round(value: number) {
 
 function parseProject(projectJson: string, fallback: RoomProject) {
   try {
-    return JSON.parse(projectJson) as RoomProject;
+    return normalizeProject(JSON.parse(projectJson));
   } catch {
     return fallback;
   }
-}
-
-function makeUniqueId(base: string, existingIds: string[]) {
-  let index = 1;
-  let id = `${base}-${index.toString().padStart(2, "0")}`;
-
-  while (existingIds.includes(id)) {
-    index += 1;
-    id = `${base}-${index.toString().padStart(2, "0")}`;
-  }
-
-  return id;
 }

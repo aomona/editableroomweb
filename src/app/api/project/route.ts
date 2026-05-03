@@ -11,7 +11,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   const project = (await request.json()) as RoomProject;
 
-  if (project.schemaVersion !== 1 || !Array.isArray(project.objects)) {
+  if (project.schemaVersion !== 2 || !Array.isArray(project.prefabs) || !Array.isArray(project.instances)) {
     return Response.json({ error: "Invalid room project" }, { status: 400 });
   }
 
