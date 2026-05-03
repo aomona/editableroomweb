@@ -5,7 +5,7 @@ export const prefabCatalog: PrefabDefinition[] = [
     "id": "Bathroom_And_Misc_1",
     "name": "Bathroom And Misc 1",
     "type": "furniture",
-    "maxInstances": 3,
+    "maxInstances": 100,
     "defaultSize": {
       "width": 0.75,
       "height": 0.53,
@@ -863,7 +863,7 @@ export const prefabCatalog: PrefabDefinition[] = [
     "id": "Tables_Kitchen_Tables_1",
     "name": "Tables Kitchen Tables 1",
     "type": "furniture",
-    "maxInstances": 3,
+    "maxInstances": 100,
     "defaultSize": {
       "width": 1.45,
       "height": 1.47,
@@ -874,7 +874,7 @@ export const prefabCatalog: PrefabDefinition[] = [
     "id": "Tables_Kitchen_Tables_2",
     "name": "Tables Kitchen Tables 2",
     "type": "furniture",
-    "maxInstances": 3,
+    "maxInstances": 400,
     "defaultSize": {
       "width": 1.16,
       "height": 1.16,
