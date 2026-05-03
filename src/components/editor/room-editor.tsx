@@ -2,6 +2,14 @@
 
 import { PointerEvent, useRef, useState, useTransition } from "react";
 import {
+  useMutation,
+  useOthers,
+  useSelf,
+  useStatus,
+  useStorage,
+  useUpdateMyPresence,
+} from "@liveblocks/react/suspense";
+import {
   Copy,
   Download,
   Eye,
@@ -59,7 +67,18 @@ const objectTypeStyles: Record<RoomObjectType, string> = {
 };
 
 export function RoomEditor({ initialProject }: RoomEditorProps) {
-  const [project, setProject] = useState(initialProject);
+  const projectJson = useStorage((root) => root.projectJson);
+  const project = parseProject(projectJson, initialProject);
+  const others = useOthers();
+  const self = useSelf();
+  const syncStatus = useStatus();
+  const updateMyPresence = useUpdateMyPresence();
+  const setSharedProject = useMutation(
+    ({ storage }, nextProject: RoomProject) => {
+      storage.set("projectJson", JSON.stringify(nextProject));
+    },
+    [],
+  );
   const [selectedId, setSelectedId] = useState(initialProject.objects[0]?.id ?? "");
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [snapToGrid, setSnapToGrid] = useState(true);
@@ -72,8 +91,13 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
   const publicUrl = typeof window === "undefined" ? "" : `${window.location.origin}/api/public/room-layout`;
 
   function updateProject(nextProject: RoomProject) {
-    setProject(nextProject);
+    setSharedProject(nextProject);
     setStatus("未保存の変更があります");
+  }
+
+  function selectObject(objectId: string) {
+    setSelectedId(objectId);
+    updateMyPresence({ selectedId: objectId });
   }
 
   function updateObject(objectId: string, patch: Partial<RoomObject>) {
@@ -150,11 +174,22 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
   function handlePointerDown(event: PointerEvent<HTMLDivElement>, objectId: string, mode: DragMode) {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    setSelectedId(objectId);
+    selectObject(objectId);
     setDragState({ objectId, mode });
   }
 
-  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+  function handleCanvasPointerMove(event: PointerEvent<HTMLDivElement>) {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const rect = canvas.getBoundingClientRect();
+      updateMyPresence({
+        cursor: {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        },
+      });
+    }
+
     if (!dragState) return;
 
     const position = getCanvasPosition(event);
@@ -199,7 +234,7 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
         ? [...project.personalToggleDefaults, { objectId: duplicate.id, defaultEnabled: true }]
         : project.personalToggleDefaults,
     });
-    setSelectedId(duplicate.id);
+    selectObject(duplicate.id);
   }
 
   function deleteSelectedObject() {
@@ -213,7 +248,7 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
         (toggle) => toggle.objectId !== selectedObject.id,
       ),
     });
-    setSelectedId(nextObjects[0]?.id ?? "");
+    selectObject(nextObjects[0]?.id ?? "");
   }
 
   function addObject(type: RoomObjectType) {
@@ -239,7 +274,7 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
         ? [...project.personalToggleDefaults, { objectId: object.id, defaultEnabled: true }]
         : project.personalToggleDefaults,
     });
-    setSelectedId(id);
+    selectObject(id);
   }
 
   function togglePersonalDefault(objectId: string, defaultEnabled: boolean) {
@@ -270,8 +305,8 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
     startTransition(async () => {
       const response = await fetch("/api/project");
       const nextProject = (await response.json()) as RoomProject;
-      setProject(nextProject);
-      setSelectedId(nextProject.objects[0]?.id ?? "");
+      setSharedProject(nextProject);
+      selectObject(nextProject.objects[0]?.id ?? "");
       setStatus("JSONファイルから読み込みました");
     });
   }
@@ -291,6 +326,8 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">Editable Room Web</h1>
               <Badge variant="secondary">VRChat layout JSON</Badge>
+              <Badge variant="outline">{others.length + 1} online</Badge>
+              <Badge variant="outline">Liveblocks: {syncStatus}</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
               位置・回転・サイズは共有レイアウト、ミラー/ライト系トグルは個人初期値として管理します。
@@ -336,7 +373,7 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
                         <button
                           key={object.id}
                           type="button"
-                          onClick={() => setSelectedId(object.id)}
+                          onClick={() => selectObject(object.id)}
                           className={cn(
                             "flex w-full items-center justify-between rounded-lg border p-3 text-left text-sm transition hover:bg-accent",
                             selectedId === object.id && "border-primary bg-accent",
@@ -347,6 +384,9 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
                             <span className="text-xs text-muted-foreground">{object.id}</span>
                           </span>
                           <Badge variant="outline">{objectTypeLabels[object.type]}</Badge>
+                          {others.some((other) => other.presence.selectedId === object.id) ? (
+                            <Badge variant="secondary">編集中</Badge>
+                          ) : null}
                         </button>
                       ))}
                     </div>
@@ -371,7 +411,8 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
                 <CardContent>
                   <div
                     ref={canvasRef}
-                    onPointerMove={handlePointerMove}
+                    onPointerMove={handleCanvasPointerMove}
+                    onPointerLeave={() => updateMyPresence({ cursor: null })}
                     onPointerUp={() => setDragState(null)}
                     onPointerCancel={() => setDragState(null)}
                     className="relative aspect-[4/3] overflow-hidden rounded-xl border bg-background shadow-inner touch-none"
@@ -421,8 +462,26 @@ export function RoomEditor({ initialProject }: RoomEditorProps) {
                         ) : null}
                       </div>
                     ))}
+                    {others.map((other) =>
+                      other.presence.cursor ? (
+                        <div
+                          key={other.connectionId}
+                          className="pointer-events-none absolute z-20 rounded-full px-2 py-1 text-[11px] font-medium text-white shadow-sm"
+                          style={{
+                            left: other.presence.cursor.x,
+                            top: other.presence.cursor.y,
+                            backgroundColor: other.presence.color,
+                            transform: "translate(8px, 8px)",
+                          }}
+                        >
+                          {other.presence.name}
+                        </div>
+                      ) : null,
+                    )}
                   </div>
-                  <p className="mt-3 text-xs text-muted-foreground">{status}</p>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {status} / あなた: {self.presence.name}
+                  </p>
                 </CardContent>
               </Card>
 
@@ -587,6 +646,14 @@ function clamp(value: number, min: number, max: number) {
 
 function round(value: number) {
   return Number(value.toFixed(4));
+}
+
+function parseProject(projectJson: string, fallback: RoomProject) {
+  try {
+    return JSON.parse(projectJson) as RoomProject;
+  } catch {
+    return fallback;
+  }
 }
 
 function makeUniqueId(base: string, existingIds: string[]) {
