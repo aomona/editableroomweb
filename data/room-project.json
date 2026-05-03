@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "id": "default-room",
+  "name": "Default Room",
+  "room": {
+    "width": 8,
+    "depth": 6,
+    "gridSize": 0.25
+  },
+  "objects": [
+    {
+      "id": "sofa-01",
+      "name": "Sofa",
+      "type": "furniture",
+      "position": {
+        "x": 0.5,
+        "y": 0,
+        "z": -1.75
+      },
+      "rotation": {
+        "y": 71.5651
+      },
+      "size": {
+        "width": 1,
+        "height": 1,
+        "depth": 0.9
+      },
+      "enabled": true
+    },
+    {
+      "id": "table-01",
+      "name": "Low Table",
+      "type": "furniture",
+      "position": {
+        "x": 0.5,
+        "y": 2,
+        "z": 0.75
+      },
+      "rotation": {
+        "y": 18.4349
+      },
+      "size": {
+        "width": 1.2,
+        "height": 0.4,
+        "depth": 0.75
+      },
+      "enabled": true
+    },
+    {
+      "id": "key-light-01",
+      "name": "Key Light",
+      "type": "light",
+      "position": {
+        "x": -1,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "y": 45
+      },
+      "size": {
+        "width": 1,
+        "height": 1,
+        "depth": 1
+      },
+      "enabled": true,
+      "light": {
+        "intensity": 1,
+        "color": "#fff4dd"
+      }
+    },
+    {
+      "id": "mirror-01",
+      "name": "Wall Mirror",
+      "type": "mirror",
+      "position": {
+        "x": 3.75,
+        "y": 2,
+        "z": 0.25
+      },
+      "rotation": {
+        "y": -90
+      },
+      "size": {
+        "width": 1.8,
+        "height": 1.2,
+        "depth": 0.05
+      },
+      "enabled": true
+    },
+    {
+      "id": "plant-01",
+      "name": "Plant",
+      "type": "prop",
+      "position": {
+        "x": -2.75,
+        "y": 0,
+        "z": -0.5
+      },
+      "rotation": {
+        "y": 25
+      },
+      "size": {
+        "width": 0.55,
+        "height": 1.4,
+        "depth": 0.55
+      },
+      "enabled": true
+    }
+  ],
+  "personalToggleDefaults": [
+    {
+      "objectId": "mirror-01",
+      "defaultEnabled": true
+    },
+    {
+      "objectId": "key-light-01",
+      "defaultEnabled": true
+    }
+  ]
+}
